@@ -1,7 +1,12 @@
+#define BLYNK_TEMPLATE_ID "TMPL6rbmwRxaJ"
+#define BLYNK_TEMPLATE_NAME "DADN"
+#define BLYNK_AUTH_TOKEN "4r7XA37ejbcuNK8BbOZiD8wm5Wvmd-cB"
+
 #include <WiFi.h>
 #include <Wire.h>
 #include <DHT20.h>
 #include <Adafruit_NeoPixel.h>
+#include <BlynkSimpleEsp32.h>
 #include "scheduler.h"
 // #include <LiquidCrystal_I2C.h>
 
@@ -13,9 +18,11 @@
 
 // Prototype Function
 void http_get(String);
-void onTimer();
+void IRAM_ATTR onTimer();
 void readDHT20();
 void debug();
+void on_led();
+void off_led();
 
 hw_timer_s * timer = NULL;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
@@ -25,18 +32,27 @@ const char* ssid = "ACLAB";
 const char* pass = "ACLAB2023";
 const char* address = "api.thingspeak.com";
 String api_key = "VCRP7KE1JWRSG8ZG";
-
+String serial_read = "";
+bool auto_light_mode = 0;
+bool motion_mode = 0;
 // object
 WiFiClient client;
 DHT20 dht20;
 ListTask Ltask;
 Adafruit_NeoPixel strip(4, led_pin, NEO_GRB + NEO_KHZ800);
+// WidgetLED led_blynk(V0);
 
 void setup() {
-    pinMode(fan_pin, OUTPUT);
+    // --- SET UP PIN ----
+    // pinMode(fan_pin, OUTPUT);
     pinMode(light_pin, ANALOG);
     pinMode(led_pin, OUTPUT);
     pinMode(PIR_PIN, INPUT);
+    
+    //---- PWM CONFIG -------
+    ledcSetup(0, 5000, 8);  // Channel 0, tần số 5kHz, độ phân giải 8-bit (0-255)
+    ledcAttachPin(fan_pin, 0);  // Gán GPIO32 vào kênh PWM 0
+
     Serial.begin(115200);
     Wire.begin();
 
@@ -55,15 +71,14 @@ void setup() {
     //     }
     // }
 
-    // ----WIFI CONFIG ---
+    // -----WIFI CONFIG ----
     WiFi.begin(ssid, pass);
     Serial.print("Đang kết nối WiFi...");
     while (WiFi.status() != WL_CONNECTED) {
         delay(500);
         Serial.print(".");
     }
-    Serial.println("\n Kết nối thành công!");
-    Serial.print(" Địa chỉ IP: ");
+    Serial.print(" Kết nối thành công, Địa chỉ IP: ");
     Serial.println(WiFi.localIP());
 
     //----- DHT20 CONFIG -------
@@ -73,56 +88,67 @@ void setup() {
     else{
         Serial.println("DHT20 OK!");
     }
-
-    // --- LED ------
+    // ---- LED ------
     strip.begin();
-    strip.show();  // Tắt LED khi khởi động
+    strip.show();
+
+    //----Blynk----
+    Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
 
     // ------ADD BEGIN TASK---------
     Ltask.SCH_Add_Task(debug, 3000 , 3000);
-    Ltask.SCH_Add_Task(readDHT20, 5000, 5000);
+    Ltask.SCH_Add_Task(readDHT20, 7000, 7000);
+}
+
+BLYNK_WRITE(V0){
+    bool button = param.asInt();
+    if(button){
+        on_led();
+    }else{
+        off_led();
+    }
+}
+BLYNK_WRITE(V1){
+    ledcWrite(0, param.asInt());
+}
+BLYNK_WRITE(V4){
+    auto_light_mode = param.asInt();
+}
+BLYNK_WRITE(V5){
+    motion_mode = param.asInt();
 }
 
 void loop() {
     Ltask.SCH_Dispatch_Task();
-    String a = "";
+    Blynk.run();
     while (Serial.available()) {
         char c = Serial.read();
-        a += c;
+        serial_read += c;
         delay(5);
     }
     
-    if (a.length() > 0) {
-        Serial.print(" Nhận dữ liệu từ Serial: ");
-        Serial.println(a);
-        http_get(a);
-        a.trim();
-        if(a == "1"){
-            Serial.print("Fan ON");
-            digitalWrite(fan_pin, HIGH);
+    if (serial_read.length() > 0) {
+        http_get(serial_read);
+        serial_read.trim();
+        if(serial_read == "1"){
+            digitalWrite(fan_pin, 100);
         }else{
-            Serial.print("Fan OFF");
             digitalWrite(fan_pin, LOW);
         }
+        serial_read = "";
     }
-
-    if((analogRead(light_pin) < 1500 ) || (digitalRead(PIR_PIN) == HIGH)){
-        strip.setPixelColor(0, strip.Color(0, 255, 0));
-        strip.setPixelColor(1, strip.Color(0, 255, 0)); 
-        strip.setPixelColor(2, strip.Color(0, 255, 0));  
-        strip.setPixelColor(3, strip.Color(0, 255, 0));
-        strip.show();
-    }else{
-        strip.setPixelColor(0, strip.Color(0, 0, 0));
-        strip.setPixelColor(1, strip.Color(0, 0, 0));
-        strip.setPixelColor(2, strip.Color(0, 0, 0));
-        strip.setPixelColor(3, strip.Color(0, 0, 0));
-        strip.show();
-
+    if(auto_light_mode){
+        if(analogRead(light_pin) < 1500 )
+            on_led();
+        else
+            off_led();
     }
-    // Serial.print("light: ");
-    // Serial.println(analogRead(light_pin));
-    
+    if(motion_mode){
+        if (digitalRead(PIR_PIN))
+            on_led();
+        else
+            off_led();
+    }
     delay(1);
 }
 
@@ -178,4 +204,21 @@ void readDHT20(){
     float humi = dht20.getHumidity();
     Serial.print("Temp: "); Serial.print(temp); Serial.print("°C");
     Serial.print(" - Humidity: "); Serial.print(humi); Serial.println("%");
+    //----send -----
+    Blynk.virtualWrite(V2, temp);
+    Blynk.virtualWrite(V3, humi);
+}
+void on_led(){
+    strip.setPixelColor(0, strip.Color(0, 255, 0));
+    strip.setPixelColor(1, strip.Color(0, 255, 0)); 
+    strip.setPixelColor(2, strip.Color(0, 255, 0));  
+    strip.setPixelColor(3, strip.Color(0, 255, 0));
+    strip.show();
+}
+void off_led(){
+    strip.setPixelColor(0, strip.Color(0, 0, 0));
+    strip.setPixelColor(1, strip.Color(0, 0, 0)); 
+    strip.setPixelColor(2, strip.Color(0, 0, 0));  
+    strip.setPixelColor(3, strip.Color(0, 0, 0));
+    strip.show();
 }
