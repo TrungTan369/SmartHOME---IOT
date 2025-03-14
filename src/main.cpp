@@ -26,9 +26,9 @@ void readDHT20();
 void debug();
 void on_led();
 void off_led();
-
 void open_door();
 void close_door();
+void IRAM_ATTR detect_motion();
 hw_timer_s * timer = NULL;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
 
@@ -42,6 +42,7 @@ bool auto_light_mode = 0;
 bool motion_mode = 0;
 bool led_state = 0;
 bool door_state = 0;
+volatile bool motion_detected = false;
 // object
 WiFiClient client;
 DHT20 dht20;
@@ -70,7 +71,7 @@ void setup() {
     timerAttachInterrupt(timer, &onTimer, true);
     timerAlarmWrite(timer, 100, true);
     timerAlarmEnable(timer);
-
+    attachInterrupt(digitalPinToInterrupt(PIR_PIN), detect_motion, RISING);
     // Serial.println("\nScanning I2C devices...");
     // for (byte address = 1; address < 127; address++) {
     //     Wire.beginTransmission(address);
@@ -82,18 +83,18 @@ void setup() {
 
     // -----WIFI CONFIG ----
     WiFi.begin(ssid, pass);
-    Serial.print("Đang kết nối WiFi...");
+    Serial.print("Connecting WiFi...");
     while (WiFi.status() != WL_CONNECTED) {
         delay(500);
         Serial.print(".");
     }
-    Serial.print(" Kết nối thành công, Địa chỉ IP: ");
+    Serial.print("Connected, IP Address: ");
     Serial.println(WiFi.localIP());
 
     //----- DHT20 CONFIG -------
     dht20.begin();
     //-----REMOTE ------
-    IrReceiver.begin(IR_Pin, ENABLE_LED_FEEDBACK);
+    // IrReceiver.begin(IR_Pin, ENABLE_LED_FEEDBACK);
     // ---- LED ------
     strip.begin();
     strip.show();
@@ -160,7 +161,7 @@ void loop() {
             off_led();
     }
     if(motion_mode){
-        if (digitalRead(PIR_PIN)){
+        if (motion_detected){
             Serial.println("Detect Motion!!!");
             if(!led_state){
                 on_led();
@@ -170,8 +171,11 @@ void loop() {
                 open_door();
                 Ltask.SCH_Add_Task(close_door, 3000, 0);
             }
+            motion_detected = 0;
         }
     }
+    // Serial.println(digitalRead(PIR_PIN));
+    // delay(20);
 }
 
 void http_get(String a) {
@@ -251,4 +255,7 @@ void open_door(){
 void close_door(){
     door_state = 0;
     door.write(0);
+}
+void IRAM_ATTR detect_motion() {
+    motion_detected = true;
 }
