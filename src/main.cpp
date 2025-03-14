@@ -40,27 +40,27 @@ String api_key = "VCRP7KE1JWRSG8ZG";
 String serial_read = "";
 bool auto_light_mode = 0;
 bool motion_mode = 0;
-
+bool led_state = 0;
+bool door_state = 0;
 // object
 WiFiClient client;
 DHT20 dht20;
 ListTask Ltask;
 Adafruit_NeoPixel strip(4, led_pin, NEO_GRB + NEO_KHZ800);
 Servo door;
-// WidgetLED led_blynk(V0);
 
 void setup() {
     // --- SET UP PIN ----
-    // pinMode(fan_pin, OUTPUT);
+    pinMode(fan_pin, OUTPUT);
     pinMode(light_pin, ANALOG);
     pinMode(led_pin, OUTPUT);
     pinMode(PIR_PIN, INPUT);
     pinMode(IR_Pin, INPUT);
     //---- PWM CONFIG -------
-    ledcSetup(0, 5000, 8);  // Channel 0, tần số 5kHz, độ phân giải 8-bit (0-255)
-    ledcAttachPin(fan_pin, 0);  // Gán GPIO32 vào kênh PWM 0
+    // ledcSetup(1, 1000, 8);
+    // ledcAttachPin(fan_pin, 1);
 
-    door.attach(servo_pin);    
+    door.attach(servo_pin);
 
     Serial.begin(115200);
     Wire.begin();
@@ -91,12 +91,9 @@ void setup() {
     Serial.println(WiFi.localIP());
 
     //----- DHT20 CONFIG -------
-    if (dht20.begin() != 0) {
-        Serial.println("DHT20 lỗi! Kiểm tra kết nối.");
-    }
-    else{
-        Serial.println("DHT20 OK!");
-    }
+    dht20.begin();
+    //-----REMOTE ------
+    IrReceiver.begin(IR_Pin, ENABLE_LED_FEEDBACK);
     // ---- LED ------
     strip.begin();
     strip.show();
@@ -118,18 +115,26 @@ BLYNK_WRITE(V0){
     }
 }
 BLYNK_WRITE(V1){
-    ledcWrite(0, param.asInt());
+    // ledcWrite(1, param.asInt());
+    analogWrite(fan_pin, param.asInt());
 }
 BLYNK_WRITE(V4){
     auto_light_mode = param.asInt();
 }
 BLYNK_WRITE(V5){
+    // Serial.println("Blit");
     motion_mode = param.asInt();
 }
 
 void loop() {
     Ltask.SCH_Dispatch_Task();
     Blynk.run();
+    // if (IrReceiver.decode()) {
+    //     Serial.println(IrReceiver.decodedIRData.decodedRawData, HEX); // Print "old" raw data
+    //     // IrReceiver.printIRResultShort(&Serial); // Print complete received data in one line
+    //     // IrReceiver.printIRSendUsage(&Serial);   // Print the statement required to send this data
+    //     IrReceiver.resume(); // Enable receiving of the next value
+    // }
     while (Serial.available()) {
         char c = Serial.read();
         serial_read += c;
@@ -140,30 +145,34 @@ void loop() {
         http_get(serial_read);
         serial_read.trim();
         if(serial_read == "1"){
-            digitalWrite(fan_pin, 100);
+            // ledcWrite(1, 255);
+            analogWrite(fan_pin, 255);
         }else{
-            digitalWrite(fan_pin, LOW);
+            // ledcWrite(1, 0);
+            analogWrite(fan_pin, 0);
         }
         serial_read = "";
     }
     if(auto_light_mode){
-        if(analogRead(light_pin) < 1500 )
+        if(analogRead(light_pin) < 1600 )
             on_led();
         else
             off_led();
     }
     if(motion_mode){
         if (digitalRead(PIR_PIN)){
-            on_led();
-            open_door();
-        }
-        else{
-            off_led();
-            close_door();
+            Serial.println("Detect Motion!!!");
+            if(!led_state){
+                on_led();
+                Ltask.SCH_Add_Task(off_led, 3000, 0);
+            }
+            if(!door_state){
+                open_door();
+                Ltask.SCH_Add_Task(close_door, 3000, 0);
+            }
         }
     }
 }
-
 
 void http_get(String a) {
     if (WiFi.status() != WL_CONNECTED) {
@@ -171,10 +180,9 @@ void http_get(String a) {
         return;
     }
 
-    Serial.println("\n Đang gửi dữ liệu lên ThingSpeak...");
+    Serial.println("\n Send to ThingSpeak...");
     
     if (client.connect(address, 80)) {
-        Serial.println(" Kết nối server thành công!");
         String getUrl = "/update?api_key=" + api_key + "&field1=" + a;
         
         client.println("GET " + getUrl + " HTTP/1.1");
@@ -185,12 +193,11 @@ void http_get(String a) {
         unsigned long timeout = millis();
         while (client.available() == 0) {
             if (millis() - timeout > 5000) {
-                Serial.println(" Timeout: Không nhận phản hồi từ server.");
+                Serial.println(" Timeout: server not respon.");
                 client.stop();
                 return;
             }
         }
-
         while (client.available()) {
             String line = client.readStringUntil('\r');
             Serial.print(line);
@@ -208,7 +215,8 @@ void IRAM_ATTR onTimer(){
     portEXIT_CRITICAL_ISR(&timerMux);
 }
 void debug(){
-    Serial.println("TEST SCHEDULER");
+    Serial.print("TEST SCHEDULER:  ");
+    Serial.println(motion_mode);
 }
 void readDHT20(){
     dht20.read();
@@ -221,6 +229,7 @@ void readDHT20(){
     Blynk.virtualWrite(V3, humi);
 }
 void on_led(){
+    led_state = 1;
     strip.setPixelColor(0, strip.Color(0, 255, 0));
     strip.setPixelColor(1, strip.Color(0, 255, 0)); 
     strip.setPixelColor(2, strip.Color(0, 255, 0));  
@@ -228,6 +237,7 @@ void on_led(){
     strip.show();
 }
 void off_led(){
+    led_state = 0;
     strip.setPixelColor(0, strip.Color(0, 0, 0));
     strip.setPixelColor(1, strip.Color(0, 0, 0)); 
     strip.setPixelColor(2, strip.Color(0, 0, 0));  
@@ -235,8 +245,10 @@ void off_led(){
     strip.show();
 }
 void open_door(){
+    door_state = 1;
     door.write(180);
 }
 void close_door(){
+    door_state = 0;
     door.write(0);
 }
