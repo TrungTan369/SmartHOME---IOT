@@ -7,6 +7,8 @@
 #include <DHT20.h>
 #include <Adafruit_NeoPixel.h>
 #include <BlynkSimpleEsp32.h>
+#include <ESP32Servo.h>
+#include <IRremote.hpp>
 #include "scheduler.h"
 // #include <LiquidCrystal_I2C.h>
 
@@ -15,7 +17,8 @@
 #define light_pin 33
 #define led_pin 27
 #define PIR_PIN 2
-
+#define IR_Pin 26
+#define servo_pin 15
 // Prototype Function
 void http_get(String);
 void IRAM_ATTR onTimer();
@@ -24,6 +27,8 @@ void debug();
 void on_led();
 void off_led();
 
+void open_door();
+void close_door();
 hw_timer_s * timer = NULL;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
 
@@ -35,11 +40,13 @@ String api_key = "VCRP7KE1JWRSG8ZG";
 String serial_read = "";
 bool auto_light_mode = 0;
 bool motion_mode = 0;
+
 // object
 WiFiClient client;
 DHT20 dht20;
 ListTask Ltask;
 Adafruit_NeoPixel strip(4, led_pin, NEO_GRB + NEO_KHZ800);
+Servo door;
 // WidgetLED led_blynk(V0);
 
 void setup() {
@@ -48,10 +55,12 @@ void setup() {
     pinMode(light_pin, ANALOG);
     pinMode(led_pin, OUTPUT);
     pinMode(PIR_PIN, INPUT);
-    
+    pinMode(IR_Pin, INPUT);
     //---- PWM CONFIG -------
     ledcSetup(0, 5000, 8);  // Channel 0, tần số 5kHz, độ phân giải 8-bit (0-255)
     ledcAttachPin(fan_pin, 0);  // Gán GPIO32 vào kênh PWM 0
+
+    door.attach(servo_pin);    
 
     Serial.begin(115200);
     Wire.begin();
@@ -144,12 +153,15 @@ void loop() {
             off_led();
     }
     if(motion_mode){
-        if (digitalRead(PIR_PIN))
+        if (digitalRead(PIR_PIN)){
             on_led();
-        else
+            open_door();
+        }
+        else{
             off_led();
+            close_door();
+        }
     }
-    delay(1);
 }
 
 
@@ -221,4 +233,10 @@ void off_led(){
     strip.setPixelColor(2, strip.Color(0, 0, 0));  
     strip.setPixelColor(3, strip.Color(0, 0, 0));
     strip.show();
+}
+void open_door(){
+    door.write(180);
+}
+void close_door(){
+    door.write(0);
 }
