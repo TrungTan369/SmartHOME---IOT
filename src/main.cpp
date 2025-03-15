@@ -5,6 +5,7 @@
 #include <WiFi.h>
 #include <Wire.h>
 #include <DHT20.h>
+#include <stdint.h>  
 #include <Adafruit_NeoPixel.h>
 #include <BlynkSimpleEsp32.h>
 #include <ESP32Servo.h>
@@ -16,9 +17,14 @@
 #define fan_pin 32
 #define light_pin 33
 #define led_pin 27
-#define PIR_PIN 2
-#define IR_Pin 26
+// #define PIR_PIN 26
+#define IR_Pin 19
 #define servo_pin 15
+#define trig_pin 26
+#define echo_pin 18
+#define key1_remote 0xF30CFF00
+#define key2_remote 0xE718FF00
+#define key3_remote 0xA15EFF00
 // Prototype Function
 void http_get(String);
 void IRAM_ATTR onTimer();
@@ -28,7 +34,10 @@ void on_led();
 void off_led();
 void open_door();
 void close_door();
-void IRAM_ATTR detect_motion();
+void ultrasonic();
+void fan_on(uint8_t pwm = 255);
+void fan_off();
+// void IRAM_ATTR detect_motion();
 hw_timer_s * timer = NULL;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
 
@@ -42,7 +51,10 @@ bool auto_light_mode = 0;
 bool motion_mode = 0;
 bool led_state = 0;
 bool door_state = 0;
-volatile bool motion_detected = false;
+bool fan_state = 0;
+// volatile bool motion_detected = false;
+long distance = 0;
+// unsigned int count = 0;
 // object
 WiFiClient client;
 DHT20 dht20;
@@ -55,8 +67,10 @@ void setup() {
     pinMode(fan_pin, OUTPUT);
     pinMode(light_pin, ANALOG);
     pinMode(led_pin, OUTPUT);
-    pinMode(PIR_PIN, INPUT);
+    // pinMode(PIR_PIN, INPUT);
     pinMode(IR_Pin, INPUT);
+    pinMode(trig_pin, OUTPUT);
+    pinMode(echo_pin, INPUT);
     //---- PWM CONFIG -------
     // ledcSetup(1, 1000, 8);
     // ledcAttachPin(fan_pin, 1);
@@ -71,7 +85,9 @@ void setup() {
     timerAttachInterrupt(timer, &onTimer, true);
     timerAlarmWrite(timer, 100, true);
     timerAlarmEnable(timer);
-    attachInterrupt(digitalPinToInterrupt(PIR_PIN), detect_motion, RISING);
+    //
+    // attachInterrupt(digitalPinToInterrupt(PIR_PIN), detect_motion, RISING);
+
     // Serial.println("\nScanning I2C devices...");
     // for (byte address = 1; address < 127; address++) {
     //     Wire.beginTransmission(address);
@@ -94,7 +110,7 @@ void setup() {
     //----- DHT20 CONFIG -------
     dht20.begin();
     //-----REMOTE ------
-    // IrReceiver.begin(IR_Pin, ENABLE_LED_FEEDBACK);
+    IrReceiver.begin(IR_Pin, ENABLE_LED_FEEDBACK);
     // ---- LED ------
     strip.begin();
     strip.show();
@@ -105,6 +121,7 @@ void setup() {
     // ------ADD BEGIN TASK---------
     Ltask.SCH_Add_Task(debug, 3000 , 3000);
     Ltask.SCH_Add_Task(readDHT20, 7000, 7000);
+    Ltask.SCH_Add_Task(ultrasonic, 2000, 2000);
 }
 
 BLYNK_WRITE(V0){
@@ -117,7 +134,7 @@ BLYNK_WRITE(V0){
 }
 BLYNK_WRITE(V1){
     // ledcWrite(1, param.asInt());
-    analogWrite(fan_pin, param.asInt());
+    fan_on(param.asInt());
 }
 BLYNK_WRITE(V4){
     auto_light_mode = param.asInt();
@@ -130,12 +147,31 @@ BLYNK_WRITE(V5){
 void loop() {
     Ltask.SCH_Dispatch_Task();
     Blynk.run();
-    // if (IrReceiver.decode()) {
-    //     Serial.println(IrReceiver.decodedIRData.decodedRawData, HEX); // Print "old" raw data
-    //     // IrReceiver.printIRResultShort(&Serial); // Print complete received data in one line
-    //     // IrReceiver.printIRSendUsage(&Serial);   // Print the statement required to send this data
-    //     IrReceiver.resume(); // Enable receiving of the next value
-    // }
+
+    if (IrReceiver.decode()) {
+        Serial.println(IrReceiver.decodedIRData.decodedRawData, HEX);
+        if(IrReceiver.decodedIRData.decodedRawData == key1_remote){
+            if(fan_state){
+                fan_off();
+            }else {
+                fan_on();
+            }
+        }else if(IrReceiver.decodedIRData.decodedRawData == key2_remote){
+            if(led_state){
+                off_led();
+            }else {
+                on_led();
+            }
+        }else if(IrReceiver.decodedIRData.decodedRawData == key3_remote){
+            if(door_state){
+                close_door();
+            }else {
+                open_door();
+            } 
+        }
+        IrReceiver.resume(); // Enable receiving of the next value
+    }
+
     while (Serial.available()) {
         char c = Serial.read();
         serial_read += c;
@@ -146,11 +182,9 @@ void loop() {
         http_get(serial_read);
         serial_read.trim();
         if(serial_read == "1"){
-            // ledcWrite(1, 255);
-            analogWrite(fan_pin, 255);
+            fan_on();
         }else{
-            // ledcWrite(1, 0);
-            analogWrite(fan_pin, 0);
+            fan_off();
         }
         serial_read = "";
     }
@@ -161,8 +195,8 @@ void loop() {
             off_led();
     }
     if(motion_mode){
-        if (motion_detected){
-            Serial.println("Detect Motion!!!");
+        if (distance < 10){
+            // Serial.println("Detect Motion!!!");
             if(!led_state){
                 on_led();
                 Ltask.SCH_Add_Task(off_led, 3000, 0);
@@ -171,11 +205,9 @@ void loop() {
                 open_door();
                 Ltask.SCH_Add_Task(close_door, 3000, 0);
             }
-            motion_detected = 0;
+            distance = 0;
         }
     }
-    // Serial.println(digitalRead(PIR_PIN));
-    // delay(20);
 }
 
 void http_get(String a) {
@@ -256,6 +288,27 @@ void close_door(){
     door_state = 0;
     door.write(0);
 }
-void IRAM_ATTR detect_motion() {
-    motion_detected = true;
+// void IRAM_ATTR detect_motion() {
+//     motion_detected = true;
+//     count++;
+// }
+void ultrasonic(){
+    digitalWrite(trig_pin, LOW);
+    delayMicroseconds(2);
+    
+    digitalWrite(trig_pin, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(trig_pin, LOW);
+    
+    long duration = pulseIn(echo_pin, HIGH, 30000);  // Giới hạn 30ms (tương đương ~5m)
+    distance = duration * 0.0343 / 2;
+    Serial.println(distance);
+}
+void fan_on(uint8_t pwm){
+    fan_state = 1;
+    analogWrite(fan_pin, pwm);
+}
+void fan_off(){
+    fan_state = 0;
+    analogWrite(fan_pin, 0);
 }
