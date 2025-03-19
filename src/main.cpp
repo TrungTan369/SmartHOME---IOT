@@ -42,8 +42,10 @@ hw_timer_s * timer = NULL;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
 
 // Variables
-const char* ssid = "ACLAB";
-const char* pass = "ACLAB2023";
+// const char* ssid = "ACLAB";
+// const char* pass = "ACLAB2023";
+const char* ssid = "ahaha";
+const char* pass = "12345678";
 const char* address = "api.thingspeak.com";
 String api_key = "VCRP7KE1JWRSG8ZG";
 String serial_read = "";
