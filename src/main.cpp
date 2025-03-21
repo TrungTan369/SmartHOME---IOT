@@ -45,7 +45,7 @@ portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
 // const char* ssid = "ACLAB";
 // const char* pass = "ACLAB2023";
 const char* ssid = "ahaha";
-const char* pass = "12345678";
+const char* pass = "123456789";
 const char* address = "api.thingspeak.com";
 String api_key = "VCRP7KE1JWRSG8ZG";
 String serial_read = "";
@@ -123,7 +123,7 @@ void setup() {
     // ------ADD BEGIN TASK---------
     Ltask.SCH_Add_Task(debug, 3000 , 3000);
     Ltask.SCH_Add_Task(readDHT20, 7000, 7000);
-    Ltask.SCH_Add_Task(ultrasonic, 2000, 2000);
+    Ltask.SCH_Add_Task(ultrasonic, 2000, 1000);
 }
 
 BLYNK_WRITE(V0){
@@ -197,7 +197,7 @@ void loop() {
             off_led();
     }
     if(motion_mode){
-        if (distance < 10){
+        if (distance < 15 && distance > 1){
             // Serial.println("Detect Motion!!!");
             if(!led_state){
                 on_led();
@@ -304,6 +304,7 @@ void ultrasonic(){
     
     long duration = pulseIn(echo_pin, HIGH, 30000);  // Giới hạn 30ms (tương đương ~5m)
     distance = duration * 0.0343 / 2;
+    Serial.print("Khoang cach: ");
     Serial.println(distance);
 }
 void fan_on(uint8_t pwm){
