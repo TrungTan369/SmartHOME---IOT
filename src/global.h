@@ -25,8 +25,8 @@
 #define key2_remote 0xE718FF00
 #define key3_remote 0xA15EFF00
 
-#define IO_KEY "aio_QHUR31Cgit9jBnCbrO6sjuItKmoP"
-#define IO_USERNAME "tannguyen369"
+#define IO_KEY ""
+#define IO_USERNAME ""
 // Prototype Function
 void handleLED(AdafruitIO_Data *);
 void handleFAN(AdafruitIO_Data *);
