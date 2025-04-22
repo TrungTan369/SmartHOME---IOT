@@ -4,10 +4,7 @@
 			"path": "."
 		},
 		{
-			"path": "../FE"
-		},
-		{
-			"path": "../myAppIoT"
+			"path": "../FE_DADN"
 		}
 	],
 	"settings": {

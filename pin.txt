@@ -1,0 +1,34 @@
+P0 = io 32
+p1 = io 33
+p2 = io 27
+p3 = io 2
+p4 = io 15
+p6 = io 12
+p10 = io 26
+p12 = io 13
+p13 = io 18
+p14 = io 19
+p15 = io 23
+p16 = io 5
+p19(sda) = io 21
+p20(scl) = io 22
+
+
+A = BA45FF00
+B = B946FF00
+C = B847FF00
+0 = E916FF00
+1 = F30CFF00
+2 = E718FF00
+3 = A15EFF00
+4 = F708FF00
+5 = E31CFF00
+6 = A55AFF00
+7 = BD42FF00
+8 = AD52FF00
+9 = B54AFF00
+UP = BF40FF00
+DOWN = E619FF00
+LEFT = F807FF00
+RIGHT = F609FF00
+ENTER = EA15FF00

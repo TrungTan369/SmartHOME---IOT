@@ -1,11 +1,11 @@
-#define BLYNK_TEMPLATE_ID "TMPL6rbmwRxaJ"
-#define BLYNK_TEMPLATE_NAME "DADN"
-#define BLYNK_AUTH_TOKEN "4r7XA37ejbcuNK8BbOZiD8wm5Wvmd-cB"
+#define BLYNK_TEMPLATE_ID "TMPL6qcK8_zLF"
+#define BLYNK_TEMPLATE_NAME "Tung"
+#define BLYNK_AUTH_TOKEN "doGO6hXdbA2O03w-2hv9YeNRcVr2imK8"
 
 #include <WiFi.h>
 #include <Wire.h>
 #include <DHT20.h>
-#include <stdint.h>  
+#include <stdint.h>
 #include <Adafruit_NeoPixel.h>
 #include <BlynkSimpleEsp32.h>
 #include <ESP32Servo.h>
@@ -30,7 +30,7 @@ void http_get(String);
 void IRAM_ATTR onTimer();
 void readDHT20();
 void debug();
-void on_led();
+void on_led(int);
 void off_led();
 void open_door();
 void close_door();
@@ -38,16 +38,16 @@ void ultrasonic();
 void fan_on(uint8_t pwm = 255);
 void fan_off();
 // void IRAM_ATTR detect_motion();
-hw_timer_s * timer = NULL;
+hw_timer_s *timer = NULL;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
 
 // Variables
-// const char* ssid = "ACLAB";
-// const char* pass = "ACLAB2023";
-const char* ssid = "ahaha";
-const char* pass = "123456789";
-const char* address = "api.thingspeak.com";
-String api_key = "VCRP7KE1JWRSG8ZG";
+const char *ssid = "ACLAB";
+const char *pass = "ACLAB2023";
+// const char *ssid = "ahaha";
+// const char *pass = "123456789";
+// const char *address = "api.thingspeak.com";
+// String api_key = "VCRP7KE1JWRSG8ZG";
 String serial_read = "";
 bool auto_light_mode = 0;
 bool motion_mode = 0;
@@ -64,7 +64,8 @@ ListTask Ltask;
 Adafruit_NeoPixel strip(4, led_pin, NEO_GRB + NEO_KHZ800);
 Servo door;
 
-void setup() {
+void setup()
+{
     // --- SET UP PIN ----
     pinMode(fan_pin, OUTPUT);
     pinMode(light_pin, ANALOG);
@@ -102,7 +103,8 @@ void setup() {
     // -----WIFI CONFIG ----
     WiFi.begin(ssid, pass);
     Serial.print("Connecting WiFi...");
-    while (WiFi.status() != WL_CONNECTED) {
+    while (WiFi.status() != WL_CONNECTED)
+    {
         delay(500);
         Serial.print(".");
     }
@@ -121,89 +123,101 @@ void setup() {
     Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
 
     // ------ADD BEGIN TASK---------
-    Ltask.SCH_Add_Task(debug, 3000 , 3000);
+    Ltask.SCH_Add_Task(debug, 3000, 3000);
     Ltask.SCH_Add_Task(readDHT20, 7000, 7000);
     Ltask.SCH_Add_Task(ultrasonic, 2000, 1000);
 }
 
-BLYNK_WRITE(V0){
-    bool button = param.asInt();
-    if(button){
-        on_led();
-    }else{
+BLYNK_WRITE(V0)
+{
+    uint8_t button = param.asInt();
+    if (button)
+    {
+        on_led(button);
+    }
+    else
+    {
         off_led();
     }
 }
-BLYNK_WRITE(V1){
+BLYNK_WRITE(V1)
+{
     // ledcWrite(1, param.asInt());
     fan_on(param.asInt());
 }
-BLYNK_WRITE(V4){
+BLYNK_WRITE(V4)
+{
     auto_light_mode = param.asInt();
 }
-BLYNK_WRITE(V5){
+BLYNK_WRITE(V5)
+{
     // Serial.println("Blit");
     motion_mode = param.asInt();
 }
 
-void loop() {
+void loop()
+{
     Ltask.SCH_Dispatch_Task();
     Blynk.run();
 
-    if (IrReceiver.decode()) {
+    if (IrReceiver.decode())
+    {
         Serial.println(IrReceiver.decodedIRData.decodedRawData, HEX);
-        if(IrReceiver.decodedIRData.decodedRawData == key1_remote){
-            if(fan_state){
+        if (IrReceiver.decodedIRData.decodedRawData == key1_remote)
+        {
+            if (fan_state)
+            {
                 fan_off();
-            }else {
+            }
+            else
+            {
                 fan_on();
             }
-        }else if(IrReceiver.decodedIRData.decodedRawData == key2_remote){
-            if(led_state){
+        }
+        else if (IrReceiver.decodedIRData.decodedRawData == key2_remote)
+        {
+            if (led_state)
+            {
                 off_led();
-            }else {
-                on_led();
             }
-        }else if(IrReceiver.decodedIRData.decodedRawData == key3_remote){
-            if(door_state){
+            else
+            {
+                on_led(99);
+            }
+        }
+        else if (IrReceiver.decodedIRData.decodedRawData == key3_remote)
+        {
+            if (door_state)
+            {
                 close_door();
-            }else {
+            }
+            else
+            {
                 open_door();
-            } 
+            }
         }
         IrReceiver.resume(); // Enable receiving of the next value
     }
 
-    while (Serial.available()) {
-        char c = Serial.read();
-        serial_read += c;
-        delay(5);
-    }
-    
-    if (serial_read.length() > 0) {
-        http_get(serial_read);
-        serial_read.trim();
-        if(serial_read == "1"){
-            fan_on();
-        }else{
-            fan_off();
-        }
-        serial_read = "";
-    }
-    if(auto_light_mode){
-        if(analogRead(light_pin) < 1600 )
-            on_led();
+    if (auto_light_mode)
+    {
+        if (analogRead(light_pin) < 1600)
+            on_led(99);
         else
             off_led();
     }
-    if(motion_mode){
-        if (distance < 15 && distance > 1){
+    if (motion_mode)
+    {
+        if (distance < 15 && distance > 1)
+        {
             // Serial.println("Detect Motion!!!");
-            if(!led_state){
-                on_led();
+            if (!led_state)
+            {
+                on_led(99);
                 Ltask.SCH_Add_Task(off_led, 3000, 0);
             }
-            if(!door_state){
+            if (!door_state)
+            {
                 open_door();
                 Ltask.SCH_Add_Task(close_door, 3000, 0);
             }
@@ -212,81 +226,60 @@ void loop() {
     }
 }
 
-void http_get(String a) {
-    if (WiFi.status() != WL_CONNECTED) {
-        Serial.println("Wifi lost!!");
-        return;
-    }
-
-    Serial.println("\n Send to ThingSpeak...");
-    
-    if (client.connect(address, 80)) {
-        String getUrl = "/update?api_key=" + api_key + "&field1=" + a;
-        
-        client.println("GET " + getUrl + " HTTP/1.1");
-        client.println("Host: api.thingspeak.com");
-        client.println("Connection: close");
-        client.println();
-
-        unsigned long timeout = millis();
-        while (client.available() == 0) {
-            if (millis() - timeout > 5000) {
-                Serial.println(" Timeout: server not respon.");
-                client.stop();
-                return;
-            }
-        }
-        while (client.available()) {
-            String line = client.readStringUntil('\r');
-            Serial.print(line);
-        }
-        
-        Serial.println("\n Đóng kết nối.");
-        client.stop();
-    } else {
-        Serial.println(" Lỗi kết nối đến server!");
-    }
-}
-void IRAM_ATTR onTimer(){
+void IRAM_ATTR onTimer()
+{
     portENTER_CRITICAL_ISR(&timerMux);
     Ltask.run();
     portEXIT_CRITICAL_ISR(&timerMux);
 }
-void debug(){
+void debug()
+{
     Serial.print("TEST SCHEDULER:  ");
-    Serial.println(motion_mode);
+    // Serial.println(motion_mode);
 }
-void readDHT20(){
+void readDHT20()
+{
     dht20.read();
     float temp = dht20.getTemperature();
     float humi = dht20.getHumidity();
-    Serial.print("Temp: "); Serial.print(temp); Serial.print("°C");
-    Serial.print(" - Humidity: "); Serial.print(humi); Serial.println("%");
+    Serial.print("Temp: ");
+    Serial.print(temp);
+    Serial.print("°C");
+    Serial.print(" - Humidity: ");
+    Serial.print(humi);
+    Serial.println("%");
     //----send -----
     Blynk.virtualWrite(V2, temp);
     Blynk.virtualWrite(V3, humi);
 }
-void on_led(){
+void on_led(int level)
+{
     led_state = 1;
+    Blynk.virtualWrite(V0, level);
+    strip.setBrightness(level + 156); // 0 -> 255 ;
     strip.setPixelColor(0, strip.Color(0, 255, 0));
-    strip.setPixelColor(1, strip.Color(0, 255, 0)); 
-    strip.setPixelColor(2, strip.Color(0, 255, 0));  
+    strip.setPixelColor(1, strip.Color(0, 255, 0));
+    strip.setPixelColor(2, strip.Color(0, 255, 0));
     strip.setPixelColor(3, strip.Color(0, 255, 0));
     strip.show();
 }
-void off_led(){
+void off_led()
+{
     led_state = 0;
+    Blynk.virtualWrite(V0, 0);
     strip.setPixelColor(0, strip.Color(0, 0, 0));
-    strip.setPixelColor(1, strip.Color(0, 0, 0)); 
-    strip.setPixelColor(2, strip.Color(0, 0, 0));  
+    strip.setPixelColor(1, strip.Color(0, 0, 0));
+    strip.setPixelColor(2, strip.Color(0, 0, 0));
     strip.setPixelColor(3, strip.Color(0, 0, 0));
     strip.show();
 }
-void open_door(){
+void open_door()
+{
     door_state = 1;
     door.write(180);
 }
-void close_door(){
+void close_door()
+{
     door_state = 0;
     door.write(0);
 }
@@ -294,24 +287,29 @@ void close_door(){
 //     motion_detected = true;
 //     count++;
 // }
-void ultrasonic(){
+void ultrasonic()
+{
     digitalWrite(trig_pin, LOW);
     delayMicroseconds(2);
-    
+
     digitalWrite(trig_pin, HIGH);
     delayMicroseconds(10);
     digitalWrite(trig_pin, LOW);
-    
-    long duration = pulseIn(echo_pin, HIGH, 30000);  // Giới hạn 30ms (tương đương ~5m)
+
+    long duration = pulseIn(echo_pin, HIGH, 30000); // Giới hạn 30ms (tương đương ~5m)
     distance = duration * 0.0343 / 2;
     Serial.print("Khoang cach: ");
     Serial.println(distance);
 }
-void fan_on(uint8_t pwm){
+void fan_on(uint8_t pwm)
+{
     fan_state = 1;
+    Blynk.virtualWrite(V1, 255);
     analogWrite(fan_pin, pwm);
 }
-void fan_off(){
+void fan_off()
+{
     fan_state = 0;
+    Blynk.virtualWrite(V1, 0);
     analogWrite(fan_pin, 0);
 }
