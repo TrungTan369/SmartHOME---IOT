@@ -1,6 +1,6 @@
-#define BLYNK_TEMPLATE_ID "TMPL6qcK8_zLF"
-#define BLYNK_TEMPLATE_NAME "Tung"
-#define BLYNK_AUTH_TOKEN "doGO6hXdbA2O03w-2hv9YeNRcVr2imK8"
+#define BLYNK_TEMPLATE_ID "TMPL6qheJEF8G"
+#define BLYNK_TEMPLATE_NAME "dadn"
+#define BLYNK_AUTH_TOKEN "BheNB766WVkV9YYNkPcOZrNq41eMnNp5"
 
 #include <WiFi.h>
 #include <Wire.h>
@@ -11,7 +11,8 @@
 #include <ESP32Servo.h>
 #include <IRremote.hpp>
 #include "scheduler.h"
-// #include <LiquidCrystal_I2C.h>
+
+#include <HTTPClient.h>
 
 // MACRO
 #define fan_pin 32
@@ -26,7 +27,6 @@
 #define key2_remote 0xE718FF00
 #define key3_remote 0xA15EFF00
 // Prototype Function
-void http_get(String);
 void IRAM_ATTR onTimer();
 void readDHT20();
 void debug();
@@ -37,18 +37,13 @@ void close_door();
 void ultrasonic();
 void fan_on(uint8_t pwm = 255);
 void fan_off();
-// void IRAM_ATTR detect_motion();
 hw_timer_s *timer = NULL;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
 
+void sendFanValue(int);
 // Variables
-const char *ssid = "ACLAB";
-const char *pass = "ACLAB2023";
-// const char *ssid = "ahaha";
-// const char *pass = "123456789";
-// const char *address = "api.thingspeak.com";
-// String api_key = "VCRP7KE1JWRSG8ZG";
-String serial_read = "";
+const char *ssid = "12345";
+const char *pass = "123456789";
 bool auto_light_mode = 0;
 bool motion_mode = 0;
 bool led_state = 0;
@@ -57,6 +52,8 @@ bool fan_state = 0;
 // volatile bool motion_detected = false;
 long distance = 0;
 // unsigned int count = 0;
+const char *address = "api.thingspeak.com";
+String api_key = "VCRP7KE1JWRSG8ZG";
 // object
 WiFiClient client;
 DHT20 dht20;
@@ -70,7 +67,6 @@ void setup()
     pinMode(fan_pin, OUTPUT);
     pinMode(light_pin, ANALOG);
     pinMode(led_pin, OUTPUT);
-    // pinMode(PIR_PIN, INPUT);
     pinMode(IR_Pin, INPUT);
     pinMode(trig_pin, OUTPUT);
     pinMode(echo_pin, INPUT);
@@ -153,6 +149,7 @@ BLYNK_WRITE(V5)
 {
     // Serial.println("Blit");
     motion_mode = param.asInt();
+    distance = 0;
 }
 
 void loop()
@@ -167,10 +164,12 @@ void loop()
         {
             if (fan_state)
             {
+                Blynk.virtualWrite(V1, 0);
                 fan_off();
             }
             else
             {
+                Blynk.virtualWrite(V1, 255);
                 fan_on();
             }
         }
@@ -178,10 +177,12 @@ void loop()
         {
             if (led_state)
             {
+                Blynk.virtualWrite(V0, 0);
                 off_led();
             }
             else
             {
+                Blynk.virtualWrite(V0, 99);
                 on_led(99);
             }
         }
@@ -202,7 +203,10 @@ void loop()
     if (auto_light_mode)
     {
         if (analogRead(light_pin) < 1600)
+        {
+            Blynk.virtualWrite(V0, 99);
             on_led(99);
+        }
         else
             off_led();
     }
@@ -214,6 +218,7 @@ void loop()
             if (!led_state)
             {
                 on_led(99);
+                Blynk.virtualWrite(V0, 99); ///
                 Ltask.SCH_Add_Task(off_led, 3000, 0);
             }
             if (!door_state)
@@ -236,6 +241,7 @@ void debug()
 {
     Serial.print("TEST SCHEDULER:  ");
     // Serial.println(motion_mode);
+    // sendFanValue(101);
 }
 void readDHT20()
 {
@@ -255,7 +261,6 @@ void readDHT20()
 void on_led(int level)
 {
     led_state = 1;
-    Blynk.virtualWrite(V0, level);
     strip.setBrightness(level + 156); // 0 -> 255 ;
     strip.setPixelColor(0, strip.Color(0, 255, 0));
     strip.setPixelColor(1, strip.Color(0, 255, 0));
@@ -266,7 +271,7 @@ void on_led(int level)
 void off_led()
 {
     led_state = 0;
-    Blynk.virtualWrite(V0, 0);
+
     strip.setPixelColor(0, strip.Color(0, 0, 0));
     strip.setPixelColor(1, strip.Color(0, 0, 0));
     strip.setPixelColor(2, strip.Color(0, 0, 0));
@@ -304,12 +309,42 @@ void ultrasonic()
 void fan_on(uint8_t pwm)
 {
     fan_state = 1;
-    Blynk.virtualWrite(V1, 255);
     analogWrite(fan_pin, pwm);
 }
 void fan_off()
 {
     fan_state = 0;
-    Blynk.virtualWrite(V1, 0);
     analogWrite(fan_pin, 0);
+}
+
+void sendFanValue(int value)
+{
+    if (WiFi.status() == WL_CONNECTED)
+    {
+        HTTPClient http;
+
+        String url = "http://" + String("10.28.129.153") + ":" + String(5000) + "/api/devices/fan/" + String(value);
+        http.begin(url);
+
+        int httpResponseCode = http.GET();
+
+        if (httpResponseCode > 0)
+        {
+            Serial.print("Gửi thành công, mã phản hồi: ");
+            Serial.println(httpResponseCode);
+            String response = http.getString();
+            Serial.println("Phản hồi: " + response);
+        }
+        else
+        {
+            Serial.print("Lỗi khi gửi: ");
+            Serial.println(httpResponseCode);
+        }
+
+        http.end();
+    }
+    else
+    {
+        Serial.println("WiFi chưa kết nối!");
+    }
 }
