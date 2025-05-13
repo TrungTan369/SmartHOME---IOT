@@ -1,0 +1,3 @@
+[submodule "DADN_Fullstack"]
+	path = DADN_Fullstack
+	url = https://github.com/TrungTan369/DADN_Fullstack.git
