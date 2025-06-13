@@ -4,8 +4,8 @@
 #define MQTT_SERVER "io.adafruit.com"
 #define MQTT_PORT 1883
 
-String IO_USERNAME = "ngtan369";                     // Replace with your Adafruit IO username
-String IO_KEY = "aio_zCgO93jR4iF2O8C1SNSPIQKDbkXN";  // Replace with your Adafruit IO key
+String IO_USERNAME = ADA_USER;  // Replace with your Adafruit IO username
+String IO_KEY = ADA_KEY;        // Replace with your Adafruit IO key
 
 WiFiClient espClient;
 PubSubClient client(espClient);
